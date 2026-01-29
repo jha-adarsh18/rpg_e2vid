@@ -3,7 +3,8 @@ from utils.loading_utils import load_model, get_device
 import numpy as np
 import argparse
 import pandas as pd
-from utils.event_readers import FixedSizeEventReader, FixedDurationEventReader
+import h5py
+from utils.event_readers import FixedSizeEventReader, FixedDurationEventReader, FixedDurationEventReaderHDF5
 from utils.inference_utils import events_to_voxel_grid, events_to_voxel_grid_pytorch
 from utils.timers import Timer
 import time
@@ -36,16 +37,20 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Read sensor size from the first first line of the event file
     path_to_events = args.input_file
 
-    header = pd.read_csv(path_to_events, delim_whitespace=True, header=None, names=['width', 'height'],
-                         dtype={'width': int, 'height': int},
-                         nrows=1)
-    width, height = header.values[0]
+    if path_to_events.endswith('.hdf5') or path_to_events.endswith('.h5'):
+        with h5py.File(path_to_events, 'r') as f:
+            width = int(f['events/x'][:].max() + 1)
+            height = int(f['events/y'][:].max() + 1)
+    else:
+        header = pd.read_csv(path_to_events, sep='\s+', header=None, names=['width', 'height'],
+                             dtype={'width': int, 'height': int},
+                             nrows=1)
+        width, height = header.values[0]
+    
     print('Sensor size: {} x {}'.format(width, height))
 
-    # Load model
     model = load_model(args.path_to_model)
     device = get_device(args.use_gpu)
 
@@ -54,9 +59,6 @@ if __name__ == "__main__":
 
     reconstructor = ImageReconstructor(model, height, width, model.num_bins, args)
 
-    """ Read chunks of events using Pandas """
-
-    # Loop through the events and reconstruct images
     N = args.window_size
     if not args.fixed_duration:
         if N is None:
@@ -81,9 +83,14 @@ if __name__ == "__main__":
         print('Will compute voxel grid on CPU.')
 
     if args.fixed_duration:
-        event_window_iterator = FixedDurationEventReader(path_to_events,
-                                                         duration_ms=args.window_duration,
-                                                         start_index=start_index)
+        if path_to_events.endswith('.hdf5') or path_to_events.endswith('.h5'):
+            event_window_iterator = FixedDurationEventReaderHDF5(path_to_events,
+                                                                 duration_ms=args.window_duration,
+                                                                 start_index=start_index)
+        else:
+            event_window_iterator = FixedDurationEventReader(path_to_events,
+                                                             duration_ms=args.window_duration,
+                                                             start_index=start_index)
     else:
         event_window_iterator = FixedSizeEventReader(path_to_events, num_events=N, start_index=start_index)
 
