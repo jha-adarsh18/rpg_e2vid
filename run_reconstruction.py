@@ -44,7 +44,7 @@ if __name__ == "__main__":
             width = int(f['events/x'][:].max() + 1)
             height = int(f['events/y'][:].max() + 1)
     else:
-        header = pd.read_csv(path_to_events, sep='\s+', header=None, names=['width', 'height'],
+        header = pd.read_csv(path_to_events, sep=r'\s+', header=None, names=['width', 'height'],
                              dtype={'width': int, 'height': int},
                              nrows=1)
         width, height = header.values[0]
