@@ -2,15 +2,14 @@ import pandas as pd
 import zipfile
 from os.path import splitext
 import numpy as np
+import h5py
 from .timers import Timer
-
 
 class FixedSizeEventReader:
     """
     Reads events from a '.txt' or '.zip' file, and packages the events into
     non-overlapping event windows, each containing a fixed number of events.
     """
-
     def __init__(self, path_to_event_file, num_events=10000, start_index=0):
         print('Will use fixed size event windows with {} events'.format(num_events))
         print('Output frame rate: variable')
@@ -70,6 +69,7 @@ class FixedDurationEventReader:
         self.event_file.close()
 
     def __next__(self):
+
         with Timer('Reading event window from file'):
             event_list = []
             for line in self.event_file:
@@ -86,3 +86,53 @@ class FixedDurationEventReader:
                     return event_window
 
         raise StopIteration
+
+
+class FixedDurationEventReaderHDF5:
+    """
+    Reads events from HDF5 file with fixed duration windows
+    """
+    def __init__(self, path_to_event_file, duration_ms=50.0, start_index=0):
+        print('Will use fixed duration event windows of size {:.2f} ms (HDF5)'.format(duration_ms))
+        print('Output frame rate: {:.1f} Hz'.format(1000.0 / duration_ms))
+        
+        self.h5_file = h5py.File(path_to_event_file, 'r')
+        self.t = self.h5_file['events/t'][:]
+        self.x = self.h5_file['events/x'][:]
+        self.y = self.h5_file['events/y'][:]
+        self.p = self.h5_file['events/p'][:]
+        
+        if self.t[0] > 1e18:
+            self.t = self.t / 1e9
+        else:
+            self.t = self.t / 1e6
+            
+        self.duration_s = duration_ms / 1000.0
+        self.current_idx = start_index
+        self.total_events = len(self.t)
+        
+    def __iter__(self):
+        return self
+        
+    def __del__(self):
+        self.h5_file.close()
+        
+    def __next__(self):
+        if self.current_idx >= self.total_events:
+            raise StopIteration
+            
+        start_idx = self.current_idx
+        start_time = self.t[start_idx]
+        end_time = start_time + self.duration_s
+        
+        while self.current_idx < self.total_events and self.t[self.current_idx] < end_time:
+            self.current_idx += 1
+            
+        event_window = np.column_stack([
+            self.t[start_idx:self.current_idx],
+            self.x[start_idx:self.current_idx],
+            self.y[start_idx:self.current_idx],
+            self.p[start_idx:self.current_idx]
+        ])
+        
+        return event_window
