@@ -72,7 +72,7 @@ class EventPreprocessor:
         self.hot_pixel_locations = []
         if options.hot_pixels_file:
             try:
-                self.hot_pixel_locations = np.loadtxt(options.hot_pixels_file, delimiter=',').astype(np.int)
+                self.hot_pixel_locations = np.loadtxt(options.hot_pixels_file, delimiter=',').astype(int)
                 print('Will remove {} hot pixels'.format(self.hot_pixel_locations.shape[0]))
             except IOError:
                 print('WARNING: could not load hot pixels file: {}'.format(options.hot_pixels_file))
